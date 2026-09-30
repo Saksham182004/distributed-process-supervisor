@@ -1,0 +1,9 @@
+.vscode
+.vscode/
+build/
+*.o
+*.out
+*.exe
+.DS_Store
+foldrStruct.md
+README_pmanager.md
