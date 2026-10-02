@@ -2,7 +2,9 @@
 #include"process_manager.h"
 #include"signal_handler.h"
 #include"process_config.h"
+#include"heartbeat_client.h"
 #include <unistd.h>
+#include <thread>
 using namespace std;
 
 
@@ -12,6 +14,20 @@ using namespace std;
 int main(){
 
     setup_signal_handler();
+
+    string worker_id = getenv("WORKER_ID") ? getenv("WORKER_ID") : "worker_default";
+    string coordinator_url = getenv("COORDINATOR_URL") ? getenv("COORDINATOR_URL") : "http://coordinator:3000/heartbeat" ;
+
+    thread heartbeat_thread([worker_id , coordinator_url](){
+        while(true){
+            send_heartbeat(worker_id, coordinator_url);
+            sleep(5);
+        }
+    });
+
+    heartbeat_thread.detach();
+
+    // sending a heartbeat to the the coordinater from this machine so that coordinator checks is this machine alive 
 
     vector<Process> YamlServices ;
 
@@ -63,7 +79,7 @@ int main(){
             }
         }
     
-    sleep(2);
+        sleep(2);
 
     }
 
