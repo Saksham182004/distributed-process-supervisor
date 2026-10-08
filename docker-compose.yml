@@ -1,0 +1,77 @@
+version: '3'
+
+services:
+  coordinator:
+    image: node:18
+    working_dir: /app
+    volumes:
+      - ./coordinator:/app
+    command: node src/index.js
+    ports:
+      - "3000:3000"
+    networks:
+      - cluster-network
+
+  worker-1:
+    image: ubuntu:22.04
+    volumes:
+      - ./worker-agent/src:/app
+    working_dir: /app
+    command: ./supervisor
+    environment:
+      - WORKER_ID=worker-1
+      - COORDINATOR_URL=http://coordinator:3000/heartbeat
+    networks:
+      - cluster-network
+
+  worker-2:
+    image: ubuntu:22.04
+    volumes:
+      - ./worker-agent/src:/app
+    working_dir: /app
+    command: ./supervisor
+    environment:
+      - WORKER_ID=worker-2
+      - COORDINATOR_URL=http://coordinator:3000/heartbeat
+    networks:
+      - cluster-network
+
+  worker-3:
+    image: ubuntu:22.04
+    volumes:
+      - ./worker-agent/src:/app
+    working_dir: /app
+    command: ./supervisor
+    environment:
+      - WORKER_ID=worker-3
+      - COORDINATOR_URL=http://coordinator:3000/heartbeat
+    networks:
+      - cluster-network
+
+  worker-4:
+    image: ubuntu:22.04
+    volumes:
+      - ./worker-agent/src:/app
+    working_dir: /app
+    command: ./supervisor
+    environment:
+      - WORKER_ID=worker-4
+      - COORDINATOR_URL=http://coordinator:3000/heartbeat
+    networks:
+      - cluster-network
+
+  worker-5:
+    image: ubuntu:22.04
+    volumes:
+      - ./worker-agent/src:/app
+    working_dir: /app
+    command: ./supervisor
+    environment:
+      - WORKER_ID=worker-5
+      - COORDINATOR_URL=http://coordinator:3000/heartbeat
+    networks:
+      - cluster-network
+
+networks:
+  cluster-network:
+    driver: bridge
