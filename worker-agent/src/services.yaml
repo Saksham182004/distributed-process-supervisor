@@ -1,11 +1,11 @@
 processes:
-  - name: worker1
+  - name: Web
     command: "sleep 5"
     max_memory_bytes: -1
     max_cpu_seconds: -1
     max_restarts: 3
 
-  - name: worker2
+  - name: Cache
     command: "sleep 8"
     max_memory_bytes: -1
     max_cpu_seconds: -1
