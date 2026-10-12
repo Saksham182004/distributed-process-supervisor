@@ -2,7 +2,15 @@
 #include "heartbeat_client.h"
 #include <curl/curl.h>
 #include "process_config.h"
+#include <yaml-cpp/yaml.h>
 using namespace std;
+
+
+// curl calls this with the coordinator's response; we just discard it
+// (must be a real function, a lambda passed through curl_easy_setopt's ... crashes)
+static size_t discard_response(char*, size_t size, size_t nmemb, void*){
+    return size * nmemb;
+}
 
 
 void send_heartbeat(const string & worker_id , const string& coordinator_url ,const vector<Process>& services){
@@ -34,6 +42,7 @@ void send_heartbeat(const string & worker_id , const string& coordinator_url ,co
         struct curl_slist* headers = nullptr;
         headers = curl_slist_append(headers, "Content-Type: application/json");
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard_response);
 
         // send it
         curl_easy_perform(curl);
