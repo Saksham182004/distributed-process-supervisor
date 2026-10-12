@@ -10,12 +10,15 @@ app.use(express.json());
 
 
 const workerLastSeen = {};
+const workerServices = {};
+
 
 app.post("/heartbeat" , (req, res)=>{
     var worker_id = req.body.worker_id ;
 
 
     workerLastSeen[worker_id] = Date.now();
+    workerServices[worker_id] = req.body.services;
 
     console.log(`Heartbeat received from ${worker_id}`);
 
@@ -24,14 +27,16 @@ app.post("/heartbeat" , (req, res)=>{
 });
 
 
-module.exports = { workerLastSeen };
+module.exports = { workerLastSeen  , workerServices};
 
-require('./health-monitor')
+
 
 
 app.listen(PORT , ()=>{
-    console.log(`Server running on the port ${PORT}`)
+    console.log(`Server running on the port ${PORT}`);
+    require('./health-monitor');
 });
+
 
 
 
