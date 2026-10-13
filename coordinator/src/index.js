@@ -31,6 +31,7 @@ app.post("/heartbeat" ,async (req, res)=>{
 
 
 
+
     workerLastSeen[worker_id] = Date.now();
     workerServices[worker_id] = req.body.services;
 
@@ -41,7 +42,7 @@ app.post("/heartbeat" ,async (req, res)=>{
 });
 
 
-module.exports = { workerLastSeen  , workerServices};
+module.exports = {redis};
 
 
 
