@@ -1,74 +1,95 @@
-const { workerLastSeen , workerServices } = require("./index.js");
-const http = require('http');
+const { redis} = require("./index.js");
+const http = require("http");
 
 const TIMEOUT_MS = 15000;
-const WORKER_PORT = 4000 ; // C++ WORKER WILL LISTEN HERE IN ORDER TO CATACH THE SERVICES 
+const WORKER_PORT = 4000; // C++ WORKER WILL LISTEN HERE IN ORDER TO CATACH THE SERVICES
 
-const   failedOver = new Set();// don't re-trigger failover for same dead worker (just a marker)
+const failedOver = new Set(); // don't re-trigger failover for same dead worker (just a marker)
 
-
-function postToWorker(workerHost , service){
+function postToWorker(workerHost, service) {
     const body = JSON.stringify(service);
     const options = {
-        hostname :workerHost ,
-        port : WORKER_PORT ,
-        path : "/run-service" ,
-        method :"POST",
-        headers  : {
+        hostname: workerHost,
+        port: WORKER_PORT,
+        path: "/run-service",
+        method: "POST",
+        headers: {
             "Content-Type": "application/json",
-            "Content-Length": Buffer.byteLength(body)
-        }
+            "Content-Length": Buffer.byteLength(body),
+        },
     };
 
     const req = http.request(options, (res) => {
-        console.log(`[FAILOVER] ${workerHost} accepted: ${service.name} (${res.statusCode})`);
+        console.log(
+            `[FAILOVER] ${workerHost} accepted: ${service.name} (${res.statusCode})`,
+        );
     });
     req.on("error", (e) => {
-        console.log(`[FAILOVER ERROR] Could not reach ${workerHost}: ${e.message}`);
+        console.log(
+            `[FAILOVER ERROR] Could not reach ${workerHost}: ${e.message}`,
+        );
     });
     req.write(body);
     req.end();
 }
 
+// now we will check
 
+setInterval(async () => {
+    const now = Date.now();
 
+    const keys = await redis.keys("worker:*:lastSeen");
 
-// now we will check 
+    if (keys.length === 0) return;
 
+    const worker_Ids = keys.map((k) => k.split(":")[1]); // get the worker ids
 
+    const lastSeenValues = await Promise.all(
+        worker_Ids.map((id) => redis.get(`worker:${id}:lastSeen`)),
+    );
 
-setInterval(() => {
-        const now = Date.now();
+    const aliveWorkers = []; // for failover logic ahead
+    const checks = [];
 
-        const aliveWorkers = Object.keys(workerLastSeen).filter(id =>
-            (now - workerLastSeen[id] < TIMEOUT_MS) // collect all the workers who are alive
-        )
+    worker_Ids.forEach((id, i) => {
+        const diff = now - parseInt(lastSeenValues[i]);
+        checks.push({ id, diff });
 
-        Object.keys(workerLastSeen).forEach(worker_id =>{ // Now search for a probable dead worker
-            const diff = now - workerLastSeen[worker_id];
-            const services = workerServices[worker_id] || [];
+        if (diff < TIMEOUT_MS) aliveWorkers.push(id);
+    });
 
-            if (diff >= TIMEOUT_MS){
-                console.log(`[ALERT] ${worker_id} DEAD — last seen ${Math.floor(diff/1000)}s ago`);
+    // handle each worker here
 
+    for (const { id, diff } of checks) {
+        const servicesRaw = await redis.get(`worker:${id}:services`);
+        const services = servicesRaw ? JSON.parse(servicesRaw) : [];
 
-                if(!failedOver.has(worker_id) && services.length > 0){
-                    const target = aliveWorkers.find( id => id!==worker_id); // 
-                    if(target){
-                         console.log(`[FAILOVER] ${worker_id} → ${target} (${services.length} service(s))`);
-                        for (const svc of services) {
-                            postToWorker(target, svc);
-                        }
-                        failedOver.add(worker_id);
-                    }else{
-                        console.log(`[FAILOVER] No alive workers available!`);
+        if (diff >= TIMEOUT_MS) {
+            console.log(
+                `[ALERT] ${id} DEAD — last seen ${Math.floor(diff / 1000)}s ago`,
+            );
+
+            if (!failedOver.has(id) && services.length > 0) {
+                // if the worker is not in the failedOver list and has some services then we need to add that in the set and sets its request to any other alive workers so that it can do the deads job
+
+                const target = aliveWorkers.find((w) => w !== id);
+                if (target) {
+                    console.log(
+                        `[FAILOVER] ${id} → ${target} (${services.length} service(s))`,
+                    );
+                    for (const svc of services) {
+                        postToWorker(target, svc);
                     }
+                    failedOver.add(id);
+                } else {
+                    console.log(`[FAILOVER] No alive workers available!`);
                 }
-
-            }else{
-                console.log(`[OK] ${worker_id} alive — services: ${services.map(s => s.name).join(", ")}`); 
-                failedOver.delete(worker_id); // if it comes back, reset so it can failover again
             }
-
-        })
-}, (10000));
+        } else {
+            console.log(
+                `[OK] ${id} alive — services: ${services.map((s) => s.name).join(", ")}`,
+            );
+            failedOver.delete(id);
+        }
+    }
+}, 10000);
