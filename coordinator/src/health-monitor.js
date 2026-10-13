@@ -1,10 +1,33 @@
 const { redis} = require("./index.js");
 const http = require("http");
+const os = require('os');
+
 
 const TIMEOUT_MS = 15000;
 const WORKER_PORT = 4000; // C++ WORKER WILL LISTEN HERE IN ORDER TO CATACH THE SERVICES
 
 const failedOver = new Set(); // don't re-trigger failover for same dead worker (just a marker)
+
+const MY_ID = process.env.HOSTNAME || os.hostname();  // unique per container
+const LEADER_TTL = 30
+
+
+async function tryBecomingLeader() {
+    // try to claim the lock ( the lock is only acquuired when the nx part is null ie noe key value pair exists)
+    const result = await redis.set("coordinator:leader" , MY_ID ,"NX" , "EX" , LEADER_TTL);
+
+
+    if (result =="OK") return true ; // just become the leader 
+
+    //Already set , now check if we are current leader 
+    const current = await redis.get("coordinator:leader");
+
+    if (current === MY_ID) {
+        await redis.expire("coordinator:leader", LEADER_TTL);  // renew TTL
+        return true;
+    }
+    return false;  // someone else is leader
+}
 
 function postToWorker(workerHost, service) {
     const body = JSON.stringify(service);
@@ -38,7 +61,14 @@ function postToWorker(workerHost, service) {
 setInterval(async () => {
     const now = Date.now();
 
+    const isLeader = await tryBecomingLeader();
+
+    console.log(`[ELECTION] ${MY_ID} — ${isLeader ? "LEADER" : "follower"}`); // ← add this
+
+
     const keys = await redis.keys("worker:*:lastSeen");
+
+   
 
     if (keys.length === 0) return;
 
@@ -69,7 +99,7 @@ setInterval(async () => {
                 `[ALERT] ${id} DEAD — last seen ${Math.floor(diff / 1000)}s ago`,
             );
 
-            if (!failedOver.has(id) && services.length > 0) {
+            if (isLeader && !failedOver.has(id) && services.length > 0) { // ONLY THE LEADER FIRES THE FAILOVER 
                 // if the worker is not in the failedOver list and has some services then we need to add that in the set and sets its request to any other alive workers so that it can do the deads job
 
                 const target = aliveWorkers.find((w) => w !== id);
