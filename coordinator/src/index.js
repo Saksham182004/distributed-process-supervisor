@@ -10,30 +10,17 @@ redis.on("connect", () => console.log("[REDIS] Connected"));
 redis.on("error", (e) => console.log("[REDIS] Error:", e.message));
 
 
-
-
-
 app.use(express.json());
 
-
-
-const workerLastSeen = {};
-const workerServices = {};
 
 
 app.post("/heartbeat" ,async (req, res)=>{
     const {worker_id , services } = req.body; 
 
 
-    await redis.set(`worker : ${worker_id} : lastSeen` , Date.now()); //Store lasteen on timestamp 
-    await redis.set(`worker : ${worker_id} : services` ,JSON.stringify(services)); // Store services as json string 
+    await redis.set(`worker:${worker_id}:lastSeen`, Date.now()); //Store lasteen on timestamp 
+    await redis.set(`worker:${worker_id}:services`,JSON.stringify(services)); // Store services as json string 
 
-
-
-
-
-    workerLastSeen[worker_id] = Date.now();
-    workerServices[worker_id] = req.body.services;
 
     console.log(`Heartbeat received from ${worker_id}`);
 
