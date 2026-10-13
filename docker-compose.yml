@@ -9,6 +9,12 @@ services:
       - "3000:3000"
     networks:
       - cluster-network
+    depends_on:
+      - redis 
+    environment:
+      - REDIS_URL=redis://redis:6379
+
+
 
   worker-1:
     build: ./worker-agent
@@ -70,6 +76,13 @@ services:
     networks:
       - cluster-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    networks:
+      - cluster-network
+
 networks:
   cluster-network:
     driver: bridge
+  
