@@ -65,10 +65,11 @@ setInterval(async () => {
 
     console.log(`[ELECTION] ${MY_ID} — ${isLeader ? "LEADER" : "follower"}`); // ← add this
 
+    if (!isLeader) return;  // ← add this
+
 
     const keys = await redis.keys("worker:*:lastSeen");
 
-   
 
     if (keys.length === 0) return;
 

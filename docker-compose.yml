@@ -15,6 +15,21 @@ services:
       - REDIS_URL=redis://redis:6379
 
 
+  coordinator-2:
+    image: node:18
+    working_dir: /app
+    volumes:
+      - ./coordinator:/app
+    command: node src/index.js
+    ports:
+      - "3001:3000"
+    networks:
+      - cluster-network
+    depends_on:
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379
+
 
   worker-1:
     build: ./worker-agent
