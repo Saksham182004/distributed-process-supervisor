@@ -8,6 +8,7 @@
 #include "run_service_server.h"
 #include "shared_queue.h"
 #include <yaml-cpp/yaml.h>
+#include <mutex>  
 using namespace std;
 
 int main(){
@@ -19,11 +20,17 @@ int main(){
 
     vector<Process> YamlServices;
     YamlServices = load_config("services.yaml");
+    mutex servicesMutex; 
 
     // NOW start heartbeat thread — YamlServices is ready
-    thread heartbeat_thread([worker_id, coordinator_url, &YamlServices](){
+    thread heartbeat_thread([worker_id, coordinator_url, &YamlServices, &servicesMutex](){
         while(true){
-            send_heartbeat(worker_id, coordinator_url, YamlServices);
+            vector<Process> snapshot ;
+            {
+                lock_guard<mutex> lock(servicesMutex);
+                snapshot = YamlServices ; // copy under the lock 
+            }
+            send_heartbeat(worker_id, coordinator_url, snapshot);
             sleep(5);
         }
     });
@@ -37,12 +44,19 @@ int main(){
 
     ProcessManager Pm;
 
-    for(Process &P : YamlServices){
-        ResourceLimits Rl;
-        Rl.max_cpu_seconds = P.max_cpu_seconds;
-        Rl.max_memory_bytes = P.max_memory_bytes;
-        P.pid = Pm.spawn_process(P.command, Rl);
+    {
+
+        lock_guard<mutex> lock(servicesMutex);
+        for(Process &P : YamlServices){
+            ResourceLimits Rl;
+            Rl.max_cpu_seconds = P.max_cpu_seconds;
+            Rl.max_memory_bytes = P.max_memory_bytes;
+            P.pid = Pm.spawn_process(P.command, Rl);
+        }
+
     }
+
+   
 
     while(true){
         {
@@ -59,7 +73,11 @@ int main(){
 
                 ResourceLimits Rl;  // default — no limits on failed-over services
                 P.pid = Pm.spawn_process(P.command, Rl);
-                YamlServices.push_back(P);
+                {
+                    lock_guard<mutex> slock(servicesMutex);
+                    YamlServices.push_back(P);
+                }
+                
                 cout << "[RUN-SERVICE] Started: " << P.name << " (pid " << P.pid << ")" << endl;
             }
         }
@@ -67,6 +85,7 @@ int main(){
         pid_t dead = get_dead_process();
 
         if(dead != -1){
+            lock_guard<mutex> slock(servicesMutex); 
             for(Process& P : YamlServices){
                 if(P.pid == dead){
                     if(P.max_restarts == -1 || P.restart_count < P.max_restarts){
