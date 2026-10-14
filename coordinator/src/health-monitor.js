@@ -89,11 +89,40 @@ setInterval(async () => {
         if (diff < TIMEOUT_MS) aliveWorkers.push(id);
     });
 
+    // ★ NEW — read every worker's services once, before the loop, so we know each worker's load up front
+
+    const servicesRawList = await Promise.all(
+        worker_Ids.map((id)=>redis.get(`worker:${id}:services`)),  
+    )
+
+    const servicesOf = {}
+    worker_Ids.forEach((id, i)=>{
+        servicesOf[id] =servicesRawList[i] ? JSON.parse(servicesRawList[i]) : [];
+    });
+
+
+    // Load -> number of services each alive worker is running 
+    const load = {}
+    aliveWorkers.forEach((w)=> (load[w] = servicesOf[w].length))
+
+    // alive worker with the fewest services wins 
+    function pickLeastLoaded(){
+        let best = null ;
+        for (const w of aliveWorkers){
+            if( best==null || load[w] < load[best]) best = w ;
+
+        }
+
+        return best;
+    }
+
+
     // handle each worker here
 
     for (const { id, diff } of checks) {
-        const servicesRaw = await redis.get(`worker:${id}:services`);
-        const services = servicesRaw ? JSON.parse(servicesRaw) : [];
+        const services = servicesOf[id]
+
+
 
         if (diff >= TIMEOUT_MS) {
             console.log(
@@ -103,18 +132,25 @@ setInterval(async () => {
             if (isLeader && !failedOver.has(id) && services.length > 0) { // ONLY THE LEADER FIRES THE FAILOVER 
                 // if the worker is not in the failedOver list and has some services then we need to add that in the set and sets its request to any other alive workers so that it can do the deads job
 
-                const target = aliveWorkers.find((w) => w !== id);
-                if (target) {
-                    console.log(
-                        `[FAILOVER] ${id} → ${target} (${services.length} service(s))`,
-                    );
-                    for (const svc of services) {
-                        postToWorker(target, svc);
-                    }
-                    failedOver.add(id);
-                } else {
+                if( aliveWorkers.length==0){
                     console.log(`[FAILOVER] No alive workers available!`);
+                    continue;
+
                 }
+
+                // spread services one at a time, each to whoever is least loaded right now
+
+                for (const svc of services){
+                    const target = pickLeastLoaded();
+                    console.log(                                       
+                        `[FAILOVER] ${id}:${svc.name} → ${target} (load ${load[target]})`,
+                    );  
+
+                    postToWorker(target, svc);   
+                    load[target]++; // count it now so the next service sees the updated load     
+
+                }
+                failedOver.add(id)            
             }
         } else {
             console.log(
