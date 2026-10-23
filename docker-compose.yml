@@ -39,7 +39,7 @@ services:
     command: ./supervisor
     environment:
       - WORKER_ID=worker-1
-      - COORDINATOR_URL=http://coordinator:3000/heartbeat
+      - COORDINATOR_URL=http://coordinator:3000/heartbeat,http://coordinator-2:3000/heartbeat
     networks:
       - cluster-network
 
@@ -51,7 +51,7 @@ services:
     command: ./supervisor
     environment:
       - WORKER_ID=worker-2
-      - COORDINATOR_URL=http://coordinator:3000/heartbeat
+      - COORDINATOR_URL=http://coordinator:3000/heartbeat,http://coordinator-2:3000/heartbeat
     networks:
       - cluster-network
 
@@ -63,7 +63,7 @@ services:
     command: ./supervisor
     environment:
       - WORKER_ID=worker-3
-      - COORDINATOR_URL=http://coordinator:3000/heartbeat
+      - COORDINATOR_URL=http://coordinator:3000/heartbeat,http://coordinator-2:3000/heartbeat
     networks:
       - cluster-network
 
@@ -75,7 +75,7 @@ services:
     command: ./supervisor
     environment:
       - WORKER_ID=worker-4
-      - COORDINATOR_URL=http://coordinator:3000/heartbeat
+      - COORDINATOR_URL=http://coordinator:3000/heartbeat,http://coordinator-2:3000/heartbeat
     networks:
       - cluster-network
 
@@ -87,7 +87,7 @@ services:
     command: ./supervisor
     environment:
       - WORKER_ID=worker-5
-      - COORDINATOR_URL=http://coordinator:3000/heartbeat
+      - COORDINATOR_URL=http://coordinator:3000/heartbeat,http://coordinator-2:3000/heartbeat
     networks:
       - cluster-network
 
