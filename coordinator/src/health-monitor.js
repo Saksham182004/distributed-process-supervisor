@@ -6,7 +6,11 @@ const os = require('os');
 const TIMEOUT_MS = 15000;
 const WORKER_PORT = 4000; // C++ WORKER WILL LISTEN HERE IN ORDER TO CATACH THE SERVICES
 
-const failedOver = new Set(); // don't re-trigger failover for same dead worker (just a marker)
+const FAILED_OVER_KEY = "coordinator:failedover";
+// if its in the redis along with id : it means the worker is dead and it persists across the coordinatres 
+// so even if one coordinator dies the other used redis and get that this workers works is handles or not 
+// if 1 it was handled not need to fireback the failover logic again and 0 means need to perform the failover logic again 
+
 
 const MY_ID = process.env.HOSTNAME || os.hostname();  // unique per container
 const LEADER_TTL = 30
@@ -65,7 +69,8 @@ setInterval(async () => {
 
     console.log(`[ELECTION] ${MY_ID} — ${isLeader ? "LEADER" : "follower"}`); // ← add this
 
-    if (!isLeader) return;  // ← add this
+    if (!isLeader) return;  // not need to do anything of failover logic if you are not the leader 
+    
 
 
     const keys = await redis.keys("worker:*:lastSeen");
@@ -129,8 +134,11 @@ setInterval(async () => {
                 `[ALERT] ${id} DEAD — last seen ${Math.floor(diff / 1000)}s ago`,
             );
 
-            if (isLeader && !failedOver.has(id) && services.length > 0) { // ONLY THE LEADER FIRES THE FAILOVER 
-                // if the worker is not in the failedOver list and has some services then we need to add that in the set and sets its request to any other alive workers so that it can do the deads job
+            const alreadyFailedOver = await redis.sismember(FAILED_OVER_KEY , id); //Checking through redis , it the worker dead : 0-> not handled yet its adead worker 
+
+
+            if (isLeader && !alreadyFailedOver && services.length > 0) { // ONLY THE LEADER FIRES THE FAILOVER 
+                // if the worker is not in the failedOver redis list  and has some services then we need to add that in the set and sets its request to any other alive workers so that it can do the deads job
 
                 if( aliveWorkers.length==0){
                     console.log(`[FAILOVER] No alive workers available!`);
@@ -150,13 +158,13 @@ setInterval(async () => {
                     load[target]++; // count it now so the next service sees the updated load     
 
                 }
-                failedOver.add(id)            
+                await redis.sadd(FAILED_OVER_KEY , id);        
             }
         } else {
             console.log(
                 `[OK] ${id} alive — services: ${services.map((s) => s.name).join(", ")}`,
             );
-            failedOver.delete(id);
+            await redis.srem(FAILED_OVER_KEY , id);
         }
     }
 }, 10000);
